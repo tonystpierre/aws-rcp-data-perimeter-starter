@@ -1,0 +1,26 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyKmsCryptographicUseOutsideOrganization",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "kms:Decrypt",
+        "kms:Encrypt",
+        "kms:ReEncrypt*",
+        "kms:GenerateDataKey*",
+        "kms:CreateGrant"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotEqualsIfExists": {
+          "aws:PrincipalOrgID": "o-xxxxxxxxxx"
+        },
+        "BoolIfExists": {
+          "aws:PrincipalIsAWSService": "false"
+        }
+      }
+    }
+  ]
+}

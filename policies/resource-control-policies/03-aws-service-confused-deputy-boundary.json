@@ -1,0 +1,55 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyAwsServiceAccessFromUnexpectedSourceOrg",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "sqs:SendMessage",
+        "kms:Decrypt",
+        "kms:GenerateDataKey*",
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "Bool": {
+          "aws:PrincipalIsAWSService": "true"
+        },
+        "StringNotEqualsIfExists": {
+          "aws:SourceOrgID": "o-xxxxxxxxxx"
+        },
+        "Null": {
+          "aws:SourceAccount": "false"
+        }
+      }
+    },
+    {
+      "Sid": "DenyAwsServiceAccessFromUnexpectedSourceAccount",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "sqs:SendMessage",
+        "kms:Decrypt",
+        "kms:GenerateDataKey*",
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "Bool": {
+          "aws:PrincipalIsAWSService": "true"
+        },
+        "StringNotEqualsIfExists": {
+          "aws:SourceAccount": "123456789012"
+        },
+        "Null": {
+          "aws:SourceAccount": "false"
+        }
+      }
+    }
+  ]
+}

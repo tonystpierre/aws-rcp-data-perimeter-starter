@@ -1,0 +1,28 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyKmsGrantAndKeyAdministrationExceptApprovedRoles",
+      "Effect": "Deny",
+      "Action": [
+        "kms:CreateGrant",
+        "kms:RetireGrant",
+        "kms:RevokeGrant",
+        "kms:PutKeyPolicy",
+        "kms:ScheduleKeyDeletion",
+        "kms:CancelKeyDeletion",
+        "kms:DisableKey",
+        "kms:DisableKeyRotation"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::*:role/SecurityKmsAutomationRole",
+            "arn:aws:iam::123456789012:role/BreakGlassRole"
+          ]
+        }
+      }
+    }
+  ]
+}

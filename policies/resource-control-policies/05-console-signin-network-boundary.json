@@ -1,0 +1,73 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyConsoleSigninOutsideApprovedNetworkPreAuth",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "signin:Authenticate"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnNotEquals": {
+          "signin:PrincipalArn": [
+            "arn:aws:iam::123456789012:role/BreakGlassRole"
+          ]
+        },
+        "NotIpAddressIfExists": {
+          "aws:SourceIp": "203.0.113.0/24"
+        },
+        "StringNotEqualsIfExists": {
+          "aws:SourceVpc": "vpc-0abc123def456789"
+        }
+      }
+    },
+    {
+      "Sid": "DenyConsoleSigninOutsideApprovedNetworkPostAuth",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "signin:AuthorizeOAuth2Access",
+        "signin:CreateOAuth2Token"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnNotEquals": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::123456789012:role/BreakGlassRole"
+          ]
+        },
+        "NotIpAddressIfExists": {
+          "aws:SourceIp": "203.0.113.0/24"
+        },
+        "StringNotEqualsIfExists": {
+          "aws:SourceVpc": "vpc-0abc123def456789"
+        }
+      }
+    },
+    {
+      "Sid": "DenyConsoleSigninFromUnexpectedVpcRegion",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "signin:Authenticate",
+        "signin:AuthorizeOAuth2Access",
+        "signin:CreateOAuth2Token"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:SourceVpc": "vpc-0abc123def456789"
+        },
+        "StringNotEqualsIfExists": {
+          "aws:RequestedRegion": "REGION_HERE"
+        },
+        "ArnNotEqualsIfExists": {
+          "signin:PrincipalArn": "arn:aws:iam::123456789012:role/BreakGlassRole",
+          "aws:PrincipalArn": "arn:aws:iam::123456789012:role/BreakGlassRole"
+        }
+      }
+    }
+  ]
+}

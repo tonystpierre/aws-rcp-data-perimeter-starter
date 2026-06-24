@@ -1,0 +1,45 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyS3InsecureTransport",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:ListBucket",
+        "s3:DeleteObject"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "Bool": {
+          "aws:SecureTransport": "false"
+        },
+        "BoolIfExists": {
+          "aws:PrincipalIsAWSService": "false"
+        }
+      }
+    },
+    {
+      "Sid": "DenyS3RequestsBelowTls12",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:ListBucket",
+        "s3:DeleteObject"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "NumericLessThan": {
+          "s3:TlsVersion": 1.2
+        },
+        "BoolIfExists": {
+          "aws:PrincipalIsAWSService": "false"
+        }
+      }
+    }
+  ]
+}

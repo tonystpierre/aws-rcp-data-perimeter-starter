@@ -1,0 +1,88 @@
+{
+  "version": "2026-06-24",
+  "exceptions": [
+    {
+      "id": "EX-001",
+      "status": "approved",
+      "type": "vendor-principal",
+      "owner": "security-architecture@example.com",
+      "business_reason": "Temporary vendor read access to a designated evidence bucket while migration to a private integration is completed.",
+      "scope": {
+        "accounts": [
+          "123456789012"
+        ],
+        "principals": [
+          "arn:aws:iam::123456789012:role/VendorEvidenceReadOnlyRole"
+        ],
+        "resources": [
+          "arn:aws:s3:::example-evidence-bucket/*"
+        ]
+      },
+      "related_policy_sids": [
+        "DenyResourceAccessFromPrincipalsOutsideOrganization"
+      ],
+      "review_by": "2026-09-01",
+      "evidence": [
+        "ticket:SEC-1234",
+        "access-analyzer:finding-reviewed"
+      ],
+      "rollback_plan": "Remove the vendor principal from the bucket policy and close the vendor integration route."
+    },
+    {
+      "id": "EX-002",
+      "status": "approved",
+      "type": "aws-service-integration",
+      "owner": "platform-security@example.com",
+      "business_reason": "AWS service integration writes delivery artifacts to an approved S3 bucket from the documented source account.",
+      "scope": {
+        "accounts": [
+          "123456789012"
+        ],
+        "source_accounts": [
+          "123456789012"
+        ],
+        "resources": [
+          "arn:aws:s3:::example-delivery-bucket/*"
+        ]
+      },
+      "related_policy_sids": [
+        "DenyAwsServiceAccessFromUnexpectedSourceAccount"
+      ],
+      "review_by": "2026-08-15",
+      "evidence": [
+        "design-review:DR-4567",
+        "cloudtrail:service-source-account-validated"
+      ],
+      "rollback_plan": "Disable the service delivery integration and remove the resource policy statement that permits the service principal."
+    },
+    {
+      "id": "EX-003",
+      "status": "approved",
+      "type": "break-glass",
+      "owner": "incident-response@example.com",
+      "business_reason": "Emergency administrator must retain tested console recovery access if network perimeter conditions are misconfigured.",
+      "scope": {
+        "accounts": [
+          "123456789012"
+        ],
+        "principals": [
+          "arn:aws:iam::123456789012:role/BreakGlassRole"
+        ],
+        "source_ips": [
+          "203.0.113.0/24"
+        ]
+      },
+      "related_policy_sids": [
+        "DenyConsoleSigninOutsideApprovedNetworkPreAuth",
+        "DenyConsoleSigninOutsideApprovedNetworkPostAuth"
+      ],
+      "review_by": "2026-07-31",
+      "evidence": [
+        "runbook:test-break-glass-quarterly",
+        "mfa:hardware-token-required"
+      ],
+      "rollback_plan": "Remove the break-glass ARN from Sign-In RCP exception conditions after replacement recovery access is verified."
+    }
+  ]
+}
+

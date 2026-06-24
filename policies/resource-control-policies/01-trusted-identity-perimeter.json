@@ -1,0 +1,33 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyResourceAccessFromPrincipalsOutsideOrganization",
+      "Effect": "Deny",
+      "Principal": "*",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:ListBucket",
+        "sqs:SendMessage",
+        "sqs:ReceiveMessage",
+        "secretsmanager:GetSecretValue",
+        "kms:Decrypt",
+        "kms:Encrypt",
+        "kms:GenerateDataKey*",
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotEqualsIfExists": {
+          "aws:PrincipalOrgID": "o-xxxxxxxxxx"
+        },
+        "BoolIfExists": {
+          "aws:PrincipalIsAWSService": "false"
+        }
+      }
+    }
+  ]
+}
