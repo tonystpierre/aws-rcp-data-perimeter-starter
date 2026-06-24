@@ -4,7 +4,7 @@ This repo is the companion artifact for:
 
 `Beyond the SCP-Only Perimeter: Architecting AWS Data Perimeters with Resource Control Policies`
 
-Companion article: `ARTICLE_URL_HERE`
+Companion article: [Beyond the SCP-Only Perimeter: Architecting AWS Data Perimeters with Resource Control Policies](https://tonystpierre.com/writing/aws-resource-control-policies-data-perimeters)
 
 ## Why This Exists
 
