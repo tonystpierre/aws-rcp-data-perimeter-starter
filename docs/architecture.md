@@ -10,6 +10,8 @@ Local policies still matter. A request can be affected by identity policies, SCP
 
 Use RCPs for organization-wide invariants that should rarely change. Keep application-specific rules close to the application.
 
+The five RCP files in this repo are examples, not an attachment plan. With the current documented quota, `RCPFullAWSAccess` counts toward the five direct RCP attachments allowed on a root, OU, or account, leaving four customer-managed RCP slots at that target. Choose the controls you need and validate minified size before attachment.
+
 ```mermaid
 flowchart TB
   exceptionRegister[Exception register]

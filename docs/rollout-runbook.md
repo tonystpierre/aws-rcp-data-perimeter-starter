@@ -3,7 +3,7 @@
 Use this as a rollout checklist. Do not start at the organization root.
 
 1. Confirm current AWS RCP/SCP support, syntax, quotas, and service exclusions in official AWS documentation.
-2. Replace placeholders: organization ID, account IDs, CIDRs, VPC IDs, Regions, role ARNs, and approved source accounts.
+2. Replace placeholders: organization ID, account IDs, CIDRs, VPC IDs, Regions, role ARNs, and approved source accounts. Choose an attachment plan before editing: do not concatenate every example, and account for `RCPFullAWSAccess` consuming one direct RCP attachment slot.
 3. Run the local checks:
 
    ```bash

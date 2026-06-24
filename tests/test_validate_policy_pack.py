@@ -151,6 +151,18 @@ class ValidatePolicyPackTests(unittest.TestCase):
 
         self.assertTrue(any("Statement[1] must be an object" in error for error in errors))
 
+    def test_bad_policy_with_duplicate_sid_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            policy = valid_rcp()
+            policy["Statement"].append(dict(policy["Statement"][0]))
+            write_json(root / "policies/resource-control-policies/bad.json", policy)
+            write_json(root / "exceptions/exception-register.example.json", valid_exception_register())
+
+            errors = validate_repo(root)
+
+        self.assertTrue(any("duplicate Sid" in error for error in errors))
+
     def test_bad_exception_record_missing_owner_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

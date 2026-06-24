@@ -23,6 +23,7 @@ EXCEPTION_REGISTER = "exceptions/exception-register.example.json"
 # AWS Organizations limits reviewed on 2026-06-24.
 RCP_SIZE_LIMIT = 5120
 SCP_SIZE_LIMIT = 10240
+CUSTOM_RCP_ATTACHMENTS_PER_TARGET = 4
 POLICY_VERSION = "2012-10-17"
 
 # Lightweight repository hygiene checks.
@@ -171,6 +172,18 @@ def _validate_resource_shape(path: Path, sid: Any, statement: Statement, errors:
         errors.append(f"{path}: {sid}: use Resource or NotResource, not both")
 
 
+def _validate_sids(path: Path, statements: list[Statement], errors: list[str]) -> None:
+    seen: dict[str, int] = {}
+    for index, statement in enumerate(statements, start=1):
+        sid = statement.get("Sid")
+        if not _is_non_empty_string(sid):
+            errors.append(f"{path}: statement {index}: Sid must be a non-empty string")
+            continue
+        if sid in seen:
+            errors.append(f"{path}: duplicate Sid \"{sid}\" in statements {seen[sid]} and {index}")
+        seen[sid] = index
+
+
 def _policy_kind(path: Path, root: Path) -> str:
     relative = path.relative_to(root)
     if relative.parts[:2] == (POLICY_DIR, RCP_DIR):
@@ -205,6 +218,7 @@ def _validate_policy_document(path: Path, root: Path, errors: list[str]) -> tupl
     if policy.get("Version") != POLICY_VERSION:
         errors.append(f"{path}: Version must be \"{POLICY_VERSION}\"")
 
+    _validate_sids(path, statements, errors)
     return kind, policy, statements
 
 
@@ -373,6 +387,21 @@ def validate_repo(root: Path) -> list[str]:
     return errors
 
 
+def _print_size_report(root: Path) -> None:
+    rcp_paths = sorted((root / POLICY_DIR / RCP_DIR).glob("*.json"))
+    if not rcp_paths:
+        return
+    print("RCP minified sizes:")
+    for path in rcp_paths:
+        policy = json.loads(path.read_text(encoding="utf-8"))
+        relative = path.relative_to(root).as_posix()
+        print(f"- {relative}: {_minified_size(policy)}/{RCP_SIZE_LIMIT} characters")
+    print(
+        "Attachment note: RCPFullAWSAccess counts toward the direct attachment quota; "
+        f"plan for at most {CUSTOM_RCP_ATTACHMENTS_PER_TARGET} customer-managed RCPs per root, OU, or account."
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     root = Path(args[0]) if args else Path(__file__).resolve().parents[1]
@@ -383,6 +412,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"- {error}")
         return 1
     print("PASS policy pack validation")
+    _print_size_report(root.resolve())
     return 0
 
 

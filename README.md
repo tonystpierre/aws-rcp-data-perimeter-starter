@@ -78,6 +78,14 @@ flowchart LR
 | `policies/resource-control-policies/05-console-signin-network-boundary.json` | RCP | Models cautious AWS Management Console sign-in network controls using AWS Sign-In RCP actions. |
 | `policies/service-control-policies/kms-grant-administration-boundary.json` | SCP | Shows the identity-side companion control for sensitive KMS administration. |
 
+## Attachment Plan
+
+Do not concatenate these examples and attach the bundle broadly. Each RCP file is a candidate customer-managed policy document, not a deployment unit.
+
+Under the quotas reviewed for this repo, `RCPFullAWSAccess` counts toward the five direct RCP attachments allowed on a root, OU, or account. That leaves four customer-managed RCP slots at a given attachment target. Select the controls you need, check minified size with the validator, and document exceptions before attachment.
+
+If you later generate policy JSON from Terraform, CloudFormation, CDK, or another pipeline, keep the rendered JSON under review and run it through the same validator. Do not let pipeline variables become undocumented perimeter bypasses.
+
 ## Important Caveats
 
 The KMS RCP is for customer-managed keys. AWS documents that RCPs do not apply to AWS managed KMS keys and do not affect `kms:RetireGrant`. KMS grant and key administration still need identity-side governance, which is why this repo includes the companion SCP.
