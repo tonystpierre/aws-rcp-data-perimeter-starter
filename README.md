@@ -1,4 +1,4 @@
-A small, opinionated starter kit for adopting AWS Organizations Resource Control Policies as part of an AWS data perimeter.
+Opinionated AWS Organizations RCP/SCP starter kit for data perimeter patterns, exception governance, validation, and staged rollout.
 
 This repo is the companion artifact for:
 
@@ -16,7 +16,7 @@ S3 bucket policies, KMS key policies, SQS queue policies, Secrets Manager resour
 
 The useful part is not one deny statement. It is the operating loop: policy, exception record, validation, and staged rollout.
 
-This repo keeps that loop small on purpose:
+This repo is a small reference kit for that loop:
 
 - A few curated RCP examples.
 - One complementary SCP for KMS administration.
@@ -38,7 +38,19 @@ Neither layer replaces IAM. Neither layer replaces local resource policies. A re
 
 This is not Terraform, CDK, CloudFormation, a deployment framework, a policy generator, or a complete policy library.
 
-The policies are reference patterns. They are not production-ready copy/paste controls.
+The policies are reference patterns. They are not controls to copy, paste, and attach broadly.
+
+## Operating Docs
+
+| Doc | Purpose |
+| --- | --- |
+| [`docs/architecture.md`](docs/architecture.md) | Layered SCP, RCP, resource policy, endpoint policy, and evidence model. |
+| [`docs/quotas-and-sharding.md`](docs/quotas-and-sharding.md) | Quota-aware RCP/SCP sharding guidance. |
+| [`docs/exception-lifecycle.md`](docs/exception-lifecycle.md) | Exception fields, approval, review, and revocation model. |
+| [`docs/rollout-runbook.md`](docs/rollout-runbook.md) | Staged rollout steps. |
+| [`docs/rollout-evidence.md`](docs/rollout-evidence.md) | CloudTrail and IAM Access Analyzer evidence templates. |
+| [`docs/public-workloads-and-cognito.md`](docs/public-workloads-and-cognito.md) | Public workload and Cognito perimeter caveat. |
+| [`docs/production-readiness-checklist.md`](docs/production-readiness-checklist.md) | Pre-merge checklist before broad attachment. |
 
 ## Architecture
 
@@ -96,20 +108,29 @@ The confused-deputy example does not blindly trust every AWS service principal. 
 
 The AWS Sign-In example can lock people out. It does not govern programmatic access using access keys or SigV4-signed API calls. Test excluded principals and recovery paths before enabling console authorization.
 
+Public-facing workloads need separate review. Cognito-backed B2C applications, federated users, unauthenticated identity-pool flows, and public sign-up paths may not fit a broad `aws:PrincipalOrgID` perimeter at the same OU as private workloads. See [`docs/public-workloads-and-cognito.md`](docs/public-workloads-and-cognito.md).
+
 ## Quick Start
 
-1. Replace placeholders: `o-xxxxxxxxxx`, `123456789012`, `203.0.113.0/24`, `vpc-0abc123def456789`, `REGION_HERE`, and `arn:aws:iam::123456789012:role/BreakGlassRole`.
-2. Run the local checks:
+1. Clone the repo and inspect the examples:
+
+   ```bash
+   git clone https://github.com/tonystpierre/aws-rcp-data-perimeter-starter.git
+   cd aws-rcp-data-perimeter-starter
+   ```
+
+2. Replace placeholders: `o-xxxxxxxxxx`, `123456789012`, `203.0.113.0/24`, `vpc-0abc123def456789`, `REGION_HERE`, and `arn:aws:iam::123456789012:role/BreakGlassRole`.
+3. Run the local checks:
 
    ```bash
    python tools/validate_policy_pack.py
    python -m unittest
    ```
 
-3. Review `exceptions/exception-register.example.json` as a real control artifact, not sample metadata.
-4. Test in a sandbox account or sandbox OU.
-5. Use IAM Access Analyzer where useful and review CloudTrail denied events. These tools reduce blind spots; they do not prove safety.
-6. Move one OU at a time. Attach at root only after lower-scope validation and a rollback path are in place.
+4. Review `exceptions/exception-register.example.json` as a real control artifact, not sample metadata.
+5. Test in a sandbox account or sandbox OU.
+6. Use IAM Access Analyzer where useful and review CloudTrail denied events. These tools reduce blind spots; they do not prove safety.
+7. Move one OU at a time. Attach at root only after lower-scope validation, CloudTrail review, Access Analyzer review, break-glass validation, and a rollback path are in place.
 
 ## Production Warning
 
@@ -119,7 +140,7 @@ Before using these patterns, re-check current AWS documentation for RCP supporte
 
 ## Source Notes
 
-These notes are here because stale AWS assumptions make bad guardrails. The repo was reviewed on 2026-06-24 against official AWS documentation.
+These notes are here because stale AWS assumptions make bad guardrails. The repo was reviewed on 2026-06-26 against official AWS documentation.
 
 At that time, AWS documented:
 
@@ -132,6 +153,7 @@ At that time, AWS documented:
 - RCPs do not affect management-account resources, service-linked roles, AWS managed KMS keys, or `kms:RetireGrant`.
 - SCPs do not affect users or roles in the management account, do not grant permissions, and do not affect external principals outside the organization.
 - AWS Sign-In RCPs use `signin:Authenticate` before authentication and `signin:AuthorizeOAuth2Access` / `signin:CreateOAuth2Token` after authentication; console authorization must be enabled before statements take effect.
+- Amazon Cognito is currently listed by AWS Organizations as an RCP-supported service, but public authentication workloads still need separate OU and flow testing.
 
 Re-check before publication or use:
 
@@ -152,7 +174,10 @@ Re-check before publication or use:
 - [IAM global condition context keys](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html)
 - [IAM condition operators](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_elements_condition_operators.html)
 - [IAM Access Analyzer](https://docs.aws.amazon.com/IAM/latest/UserGuide/what-is-access-analyzer.html)
+- [AWS CloudTrail](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-user-guide.html)
 - [Amazon S3 policy keys, including `s3:TlsVersion`](https://docs.aws.amazon.com/AmazonS3/latest/userguide/amazon-s3-policy-keys.html)
+- [Amazon Cognito user pools](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-user-pools.html)
+- [Amazon Cognito identity pools](https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-identity.html)
 - [AWS Sign-In console access control with resource policies and RCPs](https://docs.aws.amazon.com/signin/latest/userguide/console-access-control.html)
 - [AWS Sign-In condition keys reference](https://docs.aws.amazon.com/signin/latest/userguide/reference-signin-condition-keys.html)
 - [AWS Sign-In Service Authorization Reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_awssignin.html)

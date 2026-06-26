@@ -8,6 +8,8 @@ Undocumented exceptions destroy perimeter quality. A policy can look strict whil
 
 The exception list is the perimeter.
 
+For the full operating lifecycle, required fields, approval checklist, and revocation checklist, see [`exception-lifecycle.md`](exception-lifecycle.md).
+
 ## What An Exception Needs
 
 An exception record should be specific enough that a security engineer can review it without hunting for context:

@@ -20,6 +20,8 @@ Use this as a rollout checklist. Do not start at the organization root.
 10. Attach to root only after lower-scope validation and executive acceptance of residual risk.
 11. Maintain rollback access, including break-glass permissions needed to detach or revise policies.
 
+Use [`rollout-evidence.md`](rollout-evidence.md) for CloudTrail and Access Analyzer review templates. Use [`production-readiness-checklist.md`](production-readiness-checklist.md) before any broad attachment.
+
 ## Console Sign-In Checks
 
 AWS Sign-In RCPs can affect root, IAM user, federated, and IAM Identity Center console sign-in flows. Test excluded principals before enabling console authorization in production.

@@ -1,12 +1,33 @@
 {
-  "version": "2026-06-24",
+  "version": "2026-06-25",
   "exceptions": [
     {
       "id": "EX-001",
-      "status": "approved",
+      "status": "active",
       "type": "vendor-principal",
       "owner": "security-architecture@example.com",
+      "approval_owner": "head-of-cloud-security@example.com",
       "business_reason": "Temporary vendor read access to a designated evidence bucket while migration to a private integration is completed.",
+      "affected_service": "s3",
+      "source": {
+        "vendor": "Example Vendor",
+        "principal_arns": [
+          "arn:aws:iam::123456789012:role/VendorEvidenceReadOnlyRole"
+        ]
+      },
+      "target_resource_scope": {
+        "accounts": [
+          "123456789012"
+        ],
+        "resources": [
+          "arn:aws:s3:::example-evidence-bucket/*"
+        ]
+      },
+      "policy_layers": [
+        "rcp",
+        "resource-policy"
+      ],
+      "environment": "sandbox-ou",
       "scope": {
         "accounts": [
           "123456789012"
@@ -21,19 +42,52 @@
       "related_policy_sids": [
         "DenyResourceAccessFromPrincipalsOutsideOrganization"
       ],
-      "review_by": "2026-09-01",
+      "created_at": "2026-06-25",
+      "review_by": "2026-08-15",
+      "expires_at": "2026-09-01",
       "evidence": [
         "ticket:SEC-1234",
-        "access-analyzer:finding-reviewed"
+        "design-review:vendor-private-integration-plan"
       ],
+      "cloudtrail_evidence": {
+        "query": "athena:cloudtrail-vendor-access-review",
+        "result": "Only documented vendor principal observed during sandbox review."
+      },
+      "access_analyzer_evidence": {
+        "finding": "access-analyzer:finding-reviewed",
+        "result": "External access reviewed and accepted for the documented bucket scope."
+      },
       "rollback_plan": "Remove the vendor principal from the bucket policy and close the vendor integration route."
     },
     {
       "id": "EX-002",
-      "status": "approved",
+      "status": "active",
       "type": "aws-service-integration",
       "owner": "platform-security@example.com",
+      "approval_owner": "cloud-platform-lead@example.com",
       "business_reason": "AWS service integration writes delivery artifacts to an approved S3 bucket from the documented source account.",
+      "affected_service": "s3",
+      "source": {
+        "source_accounts": [
+          "123456789012"
+        ],
+        "service_principals": [
+          "delivery.logs.amazonaws.com"
+        ]
+      },
+      "target_resource_scope": {
+        "accounts": [
+          "123456789012"
+        ],
+        "resources": [
+          "arn:aws:s3:::example-delivery-bucket/*"
+        ]
+      },
+      "policy_layers": [
+        "rcp",
+        "resource-policy"
+      ],
+      "environment": "workload-ou",
       "scope": {
         "accounts": [
           "123456789012"
@@ -48,11 +102,21 @@
       "related_policy_sids": [
         "DenyAwsServiceAccessFromUnexpectedSourceAccount"
       ],
+      "created_at": "2026-06-25",
       "review_by": "2026-08-15",
+      "expires_at": "2026-10-01",
       "evidence": [
         "design-review:DR-4567",
         "cloudtrail:service-source-account-validated"
       ],
+      "cloudtrail_evidence": {
+        "query": "athena:cloudtrail-service-delivery-source-account-review",
+        "result": "Observed writes match the documented source account and service path."
+      },
+      "access_analyzer_evidence": {
+        "finding": "access-analyzer:bucket-policy-reviewed",
+        "result": "Resource policy finding reviewed as intended service access."
+      },
       "rollback_plan": "Disable the service delivery integration and remove the resource policy statement that permits the service principal."
     },
     {
@@ -60,7 +124,29 @@
       "status": "approved",
       "type": "break-glass",
       "owner": "incident-response@example.com",
+      "approval_owner": "security-operations-lead@example.com",
       "business_reason": "Emergency administrator must retain tested console recovery access if network perimeter conditions are misconfigured.",
+      "affected_service": "signin",
+      "source": {
+        "principal_arns": [
+          "arn:aws:iam::123456789012:role/BreakGlassRole"
+        ],
+        "source_ips": [
+          "203.0.113.0/24"
+        ]
+      },
+      "target_resource_scope": {
+        "accounts": [
+          "123456789012"
+        ],
+        "resources": [
+          "*"
+        ]
+      },
+      "policy_layers": [
+        "rcp"
+      ],
+      "environment": "sandbox-ou",
       "scope": {
         "accounts": [
           "123456789012"
@@ -76,13 +162,22 @@
         "DenyConsoleSigninOutsideApprovedNetworkPreAuth",
         "DenyConsoleSigninOutsideApprovedNetworkPostAuth"
       ],
+      "created_at": "2026-06-25",
       "review_by": "2026-07-31",
+      "expires_at": "2026-08-31",
       "evidence": [
         "runbook:test-break-glass-quarterly",
         "mfa:hardware-token-required"
       ],
+      "cloudtrail_evidence": {
+        "query": "athena:cloudtrail-break-glass-signin-review",
+        "result": "No standing operational use observed during review period."
+      },
+      "access_analyzer_evidence": {
+        "finding": "not-applicable:signin-rcp-console-flow",
+        "result": "Reviewed through CloudTrail and break-glass runbook evidence."
+      },
       "rollback_plan": "Remove the break-glass ARN from Sign-In RCP exception conditions after replacement recovery access is verified."
     }
   ]
 }
-

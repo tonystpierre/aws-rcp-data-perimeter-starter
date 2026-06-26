@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.validate_policy_pack import validate_repo
+from tools.validate_policy_pack import validate_repo, validate_repo_with_warnings
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -16,18 +16,28 @@ def write_json(path: Path, data: object) -> None:
 
 def valid_exception_register() -> dict:
     return {
-        "version": "2026-06-24",
+        "version": "2026-06-25",
         "exceptions": [
             {
                 "id": "EX-TEST",
-                "status": "approved",
+                "status": "active",
                 "type": "break-glass",
                 "owner": "security@example.com",
+                "approval_owner": "security-approver@example.com",
                 "business_reason": "Test exception record.",
+                "affected_service": "signin",
+                "source": {"principals": ["arn:aws:iam::123456789012:role/BreakGlassRole"]},
+                "target_resource_scope": {"accounts": ["123456789012"]},
+                "policy_layers": ["rcp"],
+                "environment": "sandbox-ou",
                 "scope": {"accounts": ["123456789012"]},
                 "related_policy_sids": ["TestSid"],
+                "created_at": "2026-06-25",
                 "review_by": "2026-12-31",
+                "expires_at": "2026-12-31",
                 "evidence": ["ticket:TEST-1"],
+                "cloudtrail_evidence": {"query": "athena:test-query"},
+                "access_analyzer_evidence": {"finding": "access-analyzer:test"},
                 "rollback_plan": "Remove the test exception.",
             }
         ],
@@ -99,6 +109,19 @@ class ValidatePolicyPackTests(unittest.TestCase):
 
         self.assertTrue(any("NotPrincipal" in error for error in errors))
 
+    def test_bad_rcp_with_non_star_principal_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_json(
+                root / "policies/resource-control-policies/bad.json",
+                valid_rcp(extra={"Principal": {"AWS": "arn:aws:iam::123456789012:root"}}),
+            )
+            write_json(root / "exceptions/exception-register.example.json", valid_exception_register())
+
+            errors = validate_repo(root)
+
+        self.assertTrue(any("Principal \"*\"" in error for error in errors))
+
     def test_bad_rcp_with_bare_global_action_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -111,6 +134,17 @@ class ValidatePolicyPackTests(unittest.TestCase):
             errors = validate_repo(root)
 
         self.assertTrue(any("bare global Action" in error for error in errors))
+
+    def test_bad_rcp_with_oversized_policy_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            policy = valid_rcp(extra={"Resource": ["arn:aws:s3:::example-bucket/" + ("a" * 5200)]})
+            write_json(root / "policies/resource-control-policies/bad.json", policy)
+            write_json(root / "exceptions/exception-register.example.json", valid_exception_register())
+
+            errors = validate_repo(root)
+
+        self.assertTrue(any("minified RCP size" in error for error in errors))
 
     def test_bad_rcp_with_malformed_action_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -163,6 +197,18 @@ class ValidatePolicyPackTests(unittest.TestCase):
 
         self.assertTrue(any("duplicate Sid" in error for error in errors))
 
+    def test_bad_exception_duplicate_id_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            register = valid_exception_register()
+            register["exceptions"].append(dict(register["exceptions"][0]))
+            write_json(root / "policies/resource-control-policies/ok.json", valid_rcp())
+            write_json(root / "exceptions/exception-register.example.json", register)
+
+            errors = validate_repo(root)
+
+        self.assertTrue(any("duplicate exception id" in error for error in errors))
+
     def test_bad_exception_record_missing_owner_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -198,6 +244,20 @@ class ValidatePolicyPackTests(unittest.TestCase):
             errors = validate_repo(root)
 
         self.assertTrue(any("review_by is not a valid calendar date" in error for error in errors))
+
+    def test_expired_exception_is_warning_not_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            register = valid_exception_register()
+            register["exceptions"][0]["created_at"] = "2025-12-01"
+            register["exceptions"][0]["review_by"] = "2026-01-01"
+            register["exceptions"][0]["expires_at"] = "2026-01-01"
+            write_json(root / "policies/resource-control-policies/ok.json", valid_rcp())
+            write_json(root / "exceptions/exception-register.example.json", register)
+
+            result = validate_repo_with_warnings(root)
+
+        self.assertTrue(any("expires_at is in the past" in warning for warning in result.warnings))
 
     def test_bad_scp_missing_action_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

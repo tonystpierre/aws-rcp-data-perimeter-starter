@@ -7,6 +7,7 @@ import datetime as dt
 import json
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -19,8 +20,9 @@ POLICY_DIR = "policies"
 RCP_DIR = "resource-control-policies"
 SCP_DIR = "service-control-policies"
 EXCEPTION_REGISTER = "exceptions/exception-register.example.json"
+SUPPORTED_PREFIXES_CONFIG = "tools/rcp-supported-prefixes.json"
 
-# AWS Organizations limits reviewed on 2026-06-24.
+# AWS Organizations limits reviewed on 2026-06-26.
 RCP_SIZE_LIMIT = 5120
 SCP_SIZE_LIMIT = 10240
 CUSTOM_RCP_ATTACHMENTS_PER_TARGET = 4
@@ -37,12 +39,21 @@ SECRET_PATTERNS = {
 }
 ALLOWED_ACCOUNT_IDS = {"123456789012"}
 ALLOWED_EMAIL_DOMAINS = {"example.com", "example.org", "example.net"}
-EXCEPTION_STATUSES = {"proposed", "approved", "expired", "rejected"}
+EXCEPTION_STATUSES = {"proposed", "approved", "active", "expired", "revoked"}
 EXCEPTION_TYPES = {"vendor-principal", "aws-service-integration", "break-glass"}
+POLICY_LAYERS = {"scp", "rcp", "resource-policy", "identity-policy", "endpoint-policy", "other"}
+PLACEHOLDER_PATTERNS = {
+    "organization ID o-xxxxxxxxxx": re.compile(r"\bo-xxxxxxxxxx\b"),
+    "account ID 123456789012": re.compile(r"\b123456789012\b"),
+    "test CIDR 203.0.113.0/24": re.compile(r"\b203\.0\.113\.0/24\b"),
+    "example VPC ID": re.compile(r"\bvpc-0abc123def456789\b"),
+    "example VPC endpoint ID": re.compile(r"\bvpce-0abc123def456789\b"),
+    "REGION_HERE": re.compile(r"\bREGION_HERE\b"),
+}
 
-# RCP-supported prefixes used by this starter, reviewed against AWS Organizations
-# RCP-supported services on 2026-06-24. Re-check before publication or use.
-RCP_SUPPORTED_PREFIXES = {
+# RCP-supported prefixes used by this starter. The checked-in config file was
+# reviewed against AWS Organizations RCP-supported services on 2026-06-26.
+DEFAULT_RCP_SUPPORTED_PREFIXES = {
     "dynamodb",
     "kms",
     "logs",
@@ -59,6 +70,12 @@ EXPECTED_POLICY_FILES = {
     f"{POLICY_DIR}/{RCP_DIR}/05-console-signin-network-boundary.json",
     f"{POLICY_DIR}/{SCP_DIR}/kms-grant-administration-boundary.json",
 }
+
+
+@dataclass(frozen=True)
+class ValidationResult:
+    errors: list[str]
+    warnings: list[str]
 
 
 def _load_json(path: Path, errors: list[str]) -> Any | None:
@@ -123,13 +140,13 @@ def _action_values(path: Path, sid: Any, action: Any, errors: list[str], allow_g
     return [value for value in values if value not in malformed]
 
 
-def _unsupported_action_prefixes(action_values: list[str]) -> list[str]:
+def _unsupported_action_prefixes(action_values: list[str], supported_prefixes: set[str]) -> list[str]:
     prefixes: set[str] = set()
     for value in action_values:
         if value == "*":
             continue
         prefix, _ = value.split(":", 1)
-        if prefix not in RCP_SUPPORTED_PREFIXES:
+        if prefix not in supported_prefixes:
             prefixes.add(prefix)
     return sorted(prefixes)
 
@@ -144,6 +161,21 @@ def _is_non_empty_string(value: Any) -> bool:
 
 def _is_non_empty_string_list(value: Any) -> bool:
     return isinstance(value, list) and bool(value) and all(_is_non_empty_string(item) for item in value)
+
+
+def _is_non_empty_object(value: Any) -> bool:
+    return isinstance(value, dict) and bool(value)
+
+
+def _parse_iso_date(path: Path, label: Any, field: str, value: Any, errors: list[str]) -> dt.date | None:
+    if not isinstance(value, str) or not DATE_RE.match(value):
+        errors.append(f"{path}: {label}: {field} must look like YYYY-MM-DD")
+        return None
+    try:
+        return dt.date.fromisoformat(value)
+    except ValueError:
+        errors.append(f"{path}: {label}: {field} is not a valid calendar date")
+        return None
 
 
 def _validate_action_shape(
@@ -222,7 +254,13 @@ def _validate_policy_document(path: Path, root: Path, errors: list[str]) -> tupl
     return kind, policy, statements
 
 
-def _validate_rcp_policy(path: Path, policy: Policy, statements: list[Statement], errors: list[str]) -> None:
+def _validate_rcp_policy(
+    path: Path,
+    policy: Policy,
+    statements: list[Statement],
+    errors: list[str],
+    supported_prefixes: set[str],
+) -> None:
     size = _minified_size(policy)
     if size > RCP_SIZE_LIMIT:
         errors.append(f"{path}: minified RCP size {size} exceeds {RCP_SIZE_LIMIT} characters")
@@ -238,7 +276,7 @@ def _validate_rcp_policy(path: Path, policy: Policy, statements: list[Statement]
         if statement.get("Principal") != "*":
             errors.append(f"{path}: {sid}: every RCP statement must use Principal \"*\"")
         action_values = _validate_action_shape(path, sid, statement, errors, allow_global=False)
-        unsupported = _unsupported_action_prefixes(action_values)
+        unsupported = _unsupported_action_prefixes(action_values, supported_prefixes)
         if unsupported:
             errors.append(f"{path}: {sid}: unsupported RCP action prefix(es): {', '.join(unsupported)}")
         _validate_resource_shape(path, sid, statement, errors)
@@ -261,18 +299,18 @@ def _validate_scp_policy(path: Path, policy: Policy, statements: list[Statement]
         _validate_resource_shape(path, sid, statement, errors)
 
 
-def _validate_policy_file(path: Path, root: Path, errors: list[str]) -> None:
+def _validate_policy_file(path: Path, root: Path, errors: list[str], supported_prefixes: set[str]) -> None:
     document = _validate_policy_document(path, root, errors)
     if document is None:
         return
     kind, policy, statements = document
     if kind == "rcp":
-        _validate_rcp_policy(path, policy, statements, errors)
+        _validate_rcp_policy(path, policy, statements, errors, supported_prefixes)
     elif kind == "scp":
         _validate_scp_policy(path, policy, statements, errors)
 
 
-def _validate_exceptions(path: Path, errors: list[str]) -> None:
+def _validate_exceptions(path: Path, errors: list[str], warnings: list[str]) -> None:
     data = _load_json(path, errors)
     if data is None:
         return
@@ -290,19 +328,35 @@ def _validate_exceptions(path: Path, errors: list[str]) -> None:
         "status",
         "type",
         "owner",
+        "approval_owner",
         "business_reason",
+        "affected_service",
+        "source",
+        "target_resource_scope",
+        "policy_layers",
+        "environment",
         "scope",
         "related_policy_sids",
+        "created_at",
         "review_by",
+        "expires_at",
         "evidence",
+        "cloudtrail_evidence",
+        "access_analyzer_evidence",
         "rollback_plan",
     }
 
+    seen_ids: dict[str, int] = {}
+    today = dt.date.today()
     for index, record in enumerate(records, start=1):
         if not isinstance(record, dict):
             errors.append(f"{path}: exception {index}: record must be an object")
             continue
         label = record.get("id", f"exception {index}")
+        if _is_non_empty_string(label):
+            if label in seen_ids:
+                errors.append(f"{path}: duplicate exception id \"{label}\" in records {seen_ids[label]} and {index}")
+            seen_ids[label] = index
         missing = sorted(required - record.keys())
         if missing:
             errors.append(f"{path}: {label}: missing required fields: {', '.join(missing)}")
@@ -313,26 +367,39 @@ def _validate_exceptions(path: Path, errors: list[str]) -> None:
         if record.get("type") not in EXCEPTION_TYPES:
             errors.append(f"{path}: {label}: type must be one of {', '.join(sorted(EXCEPTION_TYPES))}")
 
-        for field in ("owner", "business_reason", "rollback_plan"):
+        for field in ("owner", "approval_owner", "business_reason", "affected_service", "environment", "rollback_plan"):
             if not _is_non_empty_string(record.get(field)):
                 errors.append(f"{path}: {label}: {field} must be non-empty")
+
+        if not _is_non_empty_string_list(record.get("policy_layers")):
+            errors.append(f"{path}: {label}: policy_layers must be a non-empty array")
+        else:
+            invalid_layers = sorted(set(record["policy_layers"]) - POLICY_LAYERS)
+            if invalid_layers:
+                errors.append(f"{path}: {label}: unsupported policy layer(s): {', '.join(invalid_layers)}")
 
         if not _is_non_empty_string_list(record.get("related_policy_sids")):
             errors.append(f"{path}: {label}: related_policy_sids must be a non-empty array")
         if not _is_non_empty_string_list(record.get("evidence")):
             errors.append(f"{path}: {label}: evidence must be a non-empty array")
-        scope = record.get("scope")
-        if not isinstance(scope, dict) or not scope:
-            errors.append(f"{path}: {label}: scope must be a non-empty object")
 
-        review_by = record.get("review_by")
-        if not isinstance(review_by, str) or not DATE_RE.match(review_by):
-            errors.append(f"{path}: {label}: review_by must look like YYYY-MM-DD")
-        else:
-            try:
-                dt.date.fromisoformat(review_by)
-            except ValueError:
-                errors.append(f"{path}: {label}: review_by is not a valid calendar date")
+        for field in ("source", "target_resource_scope", "scope", "cloudtrail_evidence", "access_analyzer_evidence"):
+            if not _is_non_empty_object(record.get(field)):
+                errors.append(f"{path}: {label}: {field} must be a non-empty object")
+
+        created_at = _parse_iso_date(path, label, "created_at", record.get("created_at"), errors)
+        review_by = _parse_iso_date(path, label, "review_by", record.get("review_by"), errors)
+        expires_at = _parse_iso_date(path, label, "expires_at", record.get("expires_at"), errors)
+        status = record.get("status")
+        if created_at and review_by and review_by < created_at:
+            errors.append(f"{path}: {label}: review_by must not be earlier than created_at")
+        if created_at and expires_at and expires_at < created_at:
+            errors.append(f"{path}: {label}: expires_at must not be earlier than created_at")
+        if status not in {"expired", "revoked"}:
+            if review_by and review_by < today:
+                warnings.append(f"{path}: {label}: review_by is in the past")
+            if expires_at and expires_at < today:
+                warnings.append(f"{path}: {label}: expires_at is in the past")
 
 
 def _validate_expected_paths(root: Path, errors: list[str]) -> None:
@@ -364,10 +431,48 @@ def _validate_repo_hygiene(root: Path, errors: list[str]) -> None:
                 errors.append(f"{path}: email domain {domain} is not an approved placeholder domain")
 
 
-def validate_repo(root: Path) -> list[str]:
-    """Return validation errors for the repository rooted at root."""
+def _validate_placeholders(root: Path, warnings: list[str]) -> None:
+    matches: set[str] = set()
+    for directory in ("policies", "exceptions"):
+        for path in sorted((root / directory).glob("**/*")):
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            for label, pattern in PLACEHOLDER_PATTERNS.items():
+                if pattern.search(text):
+                    matches.add(label)
+    if matches:
+        warnings.append(
+            "placeholder values remain in policy or exception examples: "
+            + ", ".join(sorted(matches))
+            + "; replace before attachment"
+        )
+
+
+def _load_supported_prefixes(root: Path, errors: list[str], warnings: list[str]) -> set[str]:
+    path = root / SUPPORTED_PREFIXES_CONFIG
+    if not path.exists():
+        warnings.append(f"{path}: supported-prefix config missing; using built-in starter defaults")
+        return set(DEFAULT_RCP_SUPPORTED_PREFIXES)
+    data = _load_json(path, errors)
+    if data is None:
+        return set(DEFAULT_RCP_SUPPORTED_PREFIXES)
+    prefixes = data.get("supported_action_prefixes") if isinstance(data, dict) else None
+    if not isinstance(prefixes, list) or not prefixes or not all(isinstance(item, str) and item for item in prefixes):
+        errors.append(f"{path}: supported_action_prefixes must be a non-empty array of strings")
+        return set(DEFAULT_RCP_SUPPORTED_PREFIXES)
+    return set(prefixes)
+
+
+def validate_repo_with_warnings(root: Path) -> ValidationResult:
+    """Return validation errors and non-blocking warnings for the repository rooted at root."""
     root = root.resolve()
     errors: list[str] = []
+    warnings: list[str] = []
+    supported_prefixes = _load_supported_prefixes(root, errors, warnings)
 
     for path in sorted(root.glob("**/*.json")):
         relative = path.relative_to(root)
@@ -375,16 +480,22 @@ def validate_repo(root: Path) -> list[str]:
             _load_json(path, errors)
 
     _validate_repo_hygiene(root, errors)
+    _validate_placeholders(root, warnings)
     _validate_expected_paths(root, errors)
 
     policy_files = sorted((root / POLICY_DIR).glob("**/*.json"))
     if not policy_files:
         errors.append(f"{root / 'policies'}: no JSON policy files found")
     for path in policy_files:
-        _validate_policy_file(path, root, errors)
+        _validate_policy_file(path, root, errors, supported_prefixes)
 
-    _validate_exceptions(root / EXCEPTION_REGISTER, errors)
-    return errors
+    _validate_exceptions(root / EXCEPTION_REGISTER, errors, warnings)
+    return ValidationResult(errors=errors, warnings=warnings)
+
+
+def validate_repo(root: Path) -> list[str]:
+    """Return validation errors for the repository rooted at root."""
+    return validate_repo_with_warnings(root).errors
 
 
 def _print_size_report(root: Path) -> None:
@@ -405,13 +516,21 @@ def _print_size_report(root: Path) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     root = Path(args[0]) if args else Path(__file__).resolve().parents[1]
-    errors = validate_repo(root)
-    if errors:
+    result = validate_repo_with_warnings(root)
+    if result.errors:
         print("FAIL policy pack validation")
-        for error in errors:
+        for error in result.errors:
             print(f"- {error}")
+        if result.warnings:
+            print("WARN policy pack validation")
+            for warning in result.warnings:
+                print(f"- {warning}")
         return 1
     print("PASS policy pack validation")
+    if result.warnings:
+        print("WARN policy pack validation")
+        for warning in result.warnings:
+            print(f"- {warning}")
     _print_size_report(root.resolve())
     return 0
 

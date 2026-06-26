@@ -1,0 +1,14 @@
+{
+  "reviewed_on": "2026-06-26",
+  "source": "https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_rcps.html",
+  "note": "Prefixes used by this starter kit and verified against the AWS Organizations RCP supported-service list. Re-check before publication or implementation.",
+  "supported_action_prefixes": [
+    "dynamodb",
+    "kms",
+    "logs",
+    "s3",
+    "secretsmanager",
+    "signin",
+    "sqs"
+  ]
+}
